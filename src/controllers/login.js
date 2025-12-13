@@ -13,7 +13,7 @@ const login = async (req, res, next) => {
         return next(errorGenerator('Password is required..', 401))
     }
     try {
-        const response = await query('select name, cnic,role,password_hash from users where email = $1 and is_verified = $2', [email, true])
+        const response = await query('select user_id, name, cnic,role,password_hash from users where email = $1 and is_verified = $2', [email, true])
         if (response.rows.length === 0) {
             return next(errorGenerator('User not found', 404))
         }
@@ -24,6 +24,7 @@ const login = async (req, res, next) => {
         }
         // now we need to create token and send it as cookies to the browser
         const payload = {
+            user_id: data.user_id,
             name: data.name,
             cnic: data.cnic,
             role: data.role

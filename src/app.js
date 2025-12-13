@@ -1,5 +1,6 @@
 const express = require('express')
 const authRoutes = require('./routes/auth.js')
+const reportsRoute = require('./routes/affectedRoute')
 const errorHandler = require('./middlewware/errorHnadler.js')
 const notFoundHandler = require('./middlewware/notFoundHandler.js')
 const cors = require('cors')
@@ -21,6 +22,7 @@ app.use(cors({
 app.use(cookies())
 app.use(express.json())
 app.use('/api/auth', authRoutes)
+app.use('/api/user', reportsRoute)
 // middlewares
 app.use(errorHandler)
 app.use(notFoundHandler)
