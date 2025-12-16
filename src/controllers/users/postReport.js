@@ -1,6 +1,11 @@
-const { query } = require('../../config/db')
-const { errorGenerator } = require('../../utils/errorGenarator');
+const { query } = require("../../config/db");
+const { errorGenerator } = require("../../utils/errorGenarator");
 
+const toBoolean = (value) => {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return value;
+};
 const isValidCoordinates = (coordinateString) => {
     // ... (Your existing isValidCoordinates function is fine) ...
     const parts = coordinateString.split(/[,\s]+/);
@@ -20,14 +25,22 @@ const isValidCoordinates = (coordinateString) => {
     const isLngValid = longitude >= -180 && longitude <= 180;
 
     return isLatValid && isLngValid;
-}
+};
 const postReport = async (req, res, next) => {
-    const user = req.user
+    const user = req.user;
+
+    const homeImages = req.files?.home_images || [];
+    const shopImages = req.files?.shop_images || [];
 
     // check for disaster_type
-    const disasters = ['flood', 'earthquke', 'land_slide', 'fire']
+    const disasters = ["flood", "earthquke", "land_slide", "fire"];
     // check for damage_level
-    const levels_of_damage = ['minor', 'major', 'fully_destroyed']
+    const levels_of_damage = ["minor", "major", "fully_destroyed"];
+
+    // Apply normalization
+    req.body.are_animals_impacted = toBoolean(req.body.are_animals_impacted);
+    req.body.is_home_impacted = toBoolean(req.body.is_home_impacted);
+    req.body.is_shop_impacted = toBoolean(req.body.is_shop_impacted);
 
     // Destructure AND parse numeric values once
     const {
@@ -37,55 +50,92 @@ const postReport = async (req, res, next) => {
         is_home_impacted,
         home_damage_level,
         is_shop_impacted,
-        shop_damage_level
+        shop_damage_level,
     } = req.body;
 
     // Parse counts to integers immediately
-    const big_animals_death_count = parseInt(req.body.big_animals_death_count, 10) || 0;
-    const small_animals_death_count = parseInt(req.body.small_animals_death_count, 10) || 0;
-    const small_animals_injured_count = parseInt(req.body.small_animals_injured_count, 10) || 0;
-    const big_animals_injured_count = parseInt(req.body.big_animals_injured_count, 10) || 0;
+    const big_animals_death_count =
+        parseInt(req.body.big_animals_death_count, 10) || 0;
+    const small_animals_death_count =
+        parseInt(req.body.small_animals_death_count, 10) || 0;
+    const small_animals_injured_count =
+        parseInt(req.body.small_animals_injured_count, 10) || 0;
+    const big_animals_injured_count =
+        parseInt(req.body.big_animals_injured_count, 10) || 0;
     const total_residents_count = parseInt(req.body.total_residents_count, 10);
     const deaths_count = parseInt(req.body.deaths_count, 10) || 0;
     const injured_count = parseInt(req.body.injured_count, 10) || 0;
     const pregnant_women_count = parseInt(req.body.pregnant_women_count, 10) || 0;
-    const disabled_persons_count = parseInt(req.body.disabled_persons_count, 10) || 0;
-    const school_going_children_count = parseInt(req.body.school_going_children_count, 10) || 0;
-    const married_couples_count = parseInt(req.body.married_couples_count, 10) || 0;
-
+    const disabled_persons_count =
+        parseInt(req.body.disabled_persons_count, 10) || 0;
+    const school_going_children_count =
+        parseInt(req.body.school_going_children_count, 10) || 0;
+    const married_couples_count =
+        parseInt(req.body.married_couples_count, 10) || 0;
 
     if (!disasters.includes(disaster_type)) {
-        return next(errorGenerator('Invalid disaster type was Entered', 400))
+        return next(errorGenerator("Invalid disaster type was Entered", 400));
     }
     if (!location) {
-        return next(errorGenerator('Location is required', 400))
+        return next(errorGenerator("Location is required", 400));
     }
     // location validation
-    const isLocationValid = isValidCoordinates(location)
+    const isLocationValid = isValidCoordinates(location);
     if (!isLocationValid) {
-        return next(errorGenerator('Invalid Location', 400))
+        return next(errorGenerator("Invalid Location", 400));
     }
 
     // animals impacted validation (Your corrected boolean check is already here)
-    if (typeof are_animals_impacted !== 'boolean') {
-        return next(errorGenerator('Missing animals impacted information wether true or false', 400))
+    if (typeof are_animals_impacted !== "boolean") {
+        return next(
+            errorGenerator(
+                "Missing animals impacted information wether true or false",
+                400
+            )
+        );
     }
 
-    const totalAnimalIssues = big_animals_death_count + big_animals_injured_count + small_animals_death_count + small_animals_injured_count;
+    const totalAnimalIssues =
+        big_animals_death_count +
+        big_animals_injured_count +
+        small_animals_death_count +
+        small_animals_injured_count;
 
     if (are_animals_impacted && totalAnimalIssues === 0) {
         // If they said yes, but all counts are zero, that is a policy violation.
-        return next(errorGenerator('Voilation of policy encountered: Counts must be provided if animals were impacted', 403))
+        return next(
+            errorGenerator(
+                "Voilation of policy encountered: Counts must be provided if animals were impacted",
+                403
+            )
+        );
     }
     if (are_animals_impacted === false && totalAnimalIssues > 0) {
         // If they said no, but provided counts > 0
-        return next(errorGenerator('Voilation of policy encountered: Counts provided when animals were reported as not impacted', 403))
+        return next(
+            errorGenerator(
+                "Voilation of policy encountered: Counts provided when animals were reported as not impacted",
+                403
+            )
+        );
     }
 
     // family validations
     // not null or < 0
     if (isNaN(total_residents_count) || total_residents_count <= 0) {
-        return next(errorGenerator('Voilation Encountered in the family about information, residents cannot be zero or empty', 403))
+        return next(
+            errorGenerator(
+                "Voilation Encountered in the family about information, residents cannot be zero or empty",
+                403
+            )
+        );
+    }
+    if (is_home_impacted && !levels_of_damage.includes(home_damage_level)) {
+        return next(errorGenerator("Invalid home damage level", 400));
+    }
+
+    if (is_shop_impacted && !levels_of_damage.includes(shop_damage_level)) {
+        return next(errorGenerator("Invalid shop damage level", 400));
     }
 
     // Validate that sub-counts are not negative and do not exceed the total residents count
@@ -94,29 +144,65 @@ const postReport = async (req, res, next) => {
         injured: injured_count,
         disabled: disabled_persons_count,
         schoolChildren: school_going_children_count,
-        pregnantWomen: pregnant_women_count // Added check for completeness
+        pregnantWomen: pregnant_women_count, // Added check for completeness
     };
 
     for (const type in familyCounts) {
         const count = familyCounts[type];
         if (count < 0 || count > total_residents_count) {
-            return next(errorGenerator(`Invalid count for ${type}: cannot be negative or greater than total residents`, 400));
+            return next(
+                errorGenerator(
+                    `Invalid count for ${type}: cannot be negative or greater than total residents`,
+                    400
+                )
+            );
         }
     }
 
     // Specific check for deaths + injured not exceeding total residents
     if (deaths_count + injured_count > total_residents_count) {
-        return next(errorGenerator('Total deaths and injured cannot exceed total residents', 400));
+        return next(
+            errorGenerator(
+                "Total deaths and injured cannot exceed total residents",
+                400
+            )
+        );
     }
-
 
     // married couples check
-    // If you have 3 residents, you can only have 1 married couple (2 people). 
+    // If you have 3 residents, you can only have 1 married couple (2 people).
     // The total people represented by couples (married_couples_count * 2) must be <= total_residents_count
     if (married_couples_count * 2 > total_residents_count) {
-        return next(errorGenerator('Total people in married couples cannot exceed total residents', 400));
+        return next(
+            errorGenerator(
+                "Total people in married couples cannot exceed total residents",
+                400
+            )
+        );
+    }
+    if (
+        is_home_impacted === true &&
+        homeImages.length !== 1
+    ) {
+        return next(
+            errorGenerator(
+                "At least 1 home images are required when home is fully destroyed",
+                400
+            )
+        );
     }
 
+    if (
+        is_shop_impacted === true &&
+        shopImages.length !== 1
+    ) {
+        return next(
+            errorGenerator(
+                "At least 2 shop images are required when shop is fully destroyed",
+                400
+            )
+        );
+    }
 
     // If all validations pass, proceed with database insertion
     console.log(big_animals_death_count);
@@ -146,16 +232,37 @@ const postReport = async (req, res, next) => {
             RETURNING *
         `;
     try {
-        const response = await query(insertQuery, [user.user_id, disaster_type, location, are_animals_impacted, big_animals_death_count, big_animals_injured_count, small_animals_death_count, small_animals_injured_count, is_home_impacted, home_damage_level, is_shop_impacted, shop_damage_level, total_residents_count, deaths_count, injured_count, pregnant_women_count, disabled_persons_count, school_going_children_count, married_couples_count])
-        res.json(response)
+        const response = await query(insertQuery, [
+            user.user_id,
+            disaster_type,
+            location,
+            are_animals_impacted,
+            big_animals_death_count,
+            big_animals_injured_count,
+            small_animals_death_count,
+            small_animals_injured_count,
+            is_home_impacted,
+            home_damage_level,
+            is_shop_impacted,
+            shop_damage_level,
+            total_residents_count,
+            deaths_count,
+            injured_count,
+            pregnant_women_count,
+            disabled_persons_count,
+            school_going_children_count,
+            married_couples_count,
+        ]);
+        console.log(req.files);
+
+        res.json({ msg: "Report was filed successfully." });
     } catch (error) {
         console.log(error);
 
-        return next(errorGenerator('Something went wrong while inserting the report'))
+        return next(
+            errorGenerator("Something went wrong while inserting the report")
+        );
     }
-    // res.status(200).json({
-    //     message: "Report validated successfully, ready for DB insert"
-    //     // Return inserted data if needed
-    // });
-}
-module.exports = { postReport, isValidCoordinates } // Export isValidCoordinates if needed elsewhere
+
+};
+module.exports = { postReport, isValidCoordinates };
