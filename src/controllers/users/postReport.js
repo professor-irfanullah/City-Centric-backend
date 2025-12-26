@@ -1,6 +1,6 @@
 const { query } = require("../../config/db");
 const { errorGenerator } = require("../../utils/errorGenarator");
-
+const { uploadOnCloudinary } = require('../../utils/cloudinary')
 const toBoolean = (value) => {
     if (value === "true") return true;
     if (value === "false") return false;
@@ -33,7 +33,7 @@ const postReport = async (req, res, next) => {
     const shopImages = req.files?.shop_images || [];
 
     // check for disaster_type
-    const disasters = ["flood", "earthquke", "land_slide", "fire"];
+    const disasters = ["flood", "earthquake", "land_slide", "fire"];
     // check for damage_level
     const levels_of_damage = ["minor", "major", "fully_destroyed"];
 
@@ -227,11 +227,54 @@ const postReport = async (req, res, next) => {
                 PREGNANT_WOMEN_COUNT, 
                 DISABLED_PERSONS_COUNT,
                 SCHOOL_GOING_CHILDREN_COUNT, 
-                MARRIED_COUPLES_COUNT
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                MARRIED_COUPLES_COUNT,
+                home_image_url,
+                home_image_public_id,
+                shop_image_url,
+                shop_image_public_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,$20,$21,$22,$23)
             RETURNING *
         `;
+    // Initialise all image fields as null
+    let homeImageUrl = null;
+    let homeImagePublicId = null;
+    let shopImageUrl = null;
+    let shopImagePublicId = null;
+
     try {
+        // 1. Conditional Home Upload
+        if (is_home_impacted === true) {
+            // Ensure the file actually exists in the request
+            if (!req.files?.home_images?.[0]) {
+                return next(errorGenerator("Home image is required when home is impacted", 400));
+            }
+
+            const result = await uploadOnCloudinary(req.files.home_images[0].path, 'home_damage');
+
+            if (!result) {
+                return next(errorGenerator("Failed to upload home damage image", 500));
+            }
+
+            homeImageUrl = result.secure_url;
+            homeImagePublicId = result.public_id;
+        }
+
+        // 2. Conditional Shop Upload
+        if (is_shop_impacted === true) {
+            if (!req.files?.shop_images?.[0]) {
+                return next(errorGenerator("Shop image is required when shop is impacted", 400));
+            }
+
+            const result = await uploadOnCloudinary(req.files.shop_images[0].path, 'shop_damage');
+
+            if (!result) {
+                // Clean up home image if shop upload fails to maintain atomicity
+                return next(errorGenerator("Failed to upload shop damage image", 500));
+            }
+
+            shopImageUrl = result.secure_url;
+            shopImagePublicId = result.public_id;
+        }
         const response = await query(insertQuery, [
             user.user_id,
             disaster_type,
@@ -252,8 +295,12 @@ const postReport = async (req, res, next) => {
             disabled_persons_count,
             school_going_children_count,
             married_couples_count,
+            homeImageUrl,        // Will be null if is_home_impacted is false
+            homeImagePublicId,  // Will be null if is_home_impacted is false
+            shopImageUrl,        // Will be null if is_shop_impacted is false
+            shopImagePublicId
         ]);
-        console.log(req.files);
+        console.log(homeImageUrl);
 
         res.json({ msg: "Report was filed successfully." });
     } catch (error) {
