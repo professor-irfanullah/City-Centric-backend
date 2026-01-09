@@ -23,6 +23,7 @@ app.use(cookies())
 app.use(express.json())
 app.use('/api/auth', authRoutes)
 app.use('/api/user', reportsRoute)
+app.use('/api/admin', require('./routes/adminRoutes.js'))
 // middlewares
 app.use(errorHandler)
 app.use(notFoundHandler)
