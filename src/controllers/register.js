@@ -72,22 +72,5 @@ const registerUser = async (req, res, next) => {
     finally {
         client.release()
     }
-    /*
- 
-        // Call Brevo service
-        await sendVerificationEmail({
-            email,
-            name,
-            verificationLink
-        });
-        await pool.query('COMMIT')
-        res.json({ message: "Verification email sent!" });
-    } catch (error) {
-        console.log(error);
-        await pool.query('ROLLBACK')
-        return next(errorGenerator('Something went wrong during registration'))
-    }
-    
-    */
 }
 module.exports = { registerUser }
