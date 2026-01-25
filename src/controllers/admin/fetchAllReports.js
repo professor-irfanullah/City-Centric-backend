@@ -11,6 +11,7 @@ const fetchAllReports = async (req, res, next) => {
 	U.VILLAGE,
 	U.TEHSIL,
 	U.DISTRICT,
+	DR.REPORT_ID,
 	DR.DISASTER_TYPE,
 	DR.LOCATION,
 	DR.CREATED_AT,
