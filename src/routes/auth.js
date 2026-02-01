@@ -5,12 +5,13 @@ const { regitrationVerification } = require('../controllers/verifyRegisteration.
 const { login } = require('../controllers/login.js')
 const { protectedRoute } = require('../middlewware/verifyTokenMiddleware.js')
 const { protectedRouteHandler } = require('../controllers/ptotectedRoute.js')
+const limiter = require('../middlewware/rateLimiter.js')
 const router = express.Router()
 router.use(express.json())
 
 router.get('/test', test)
 router.get('/verify', regitrationVerification)
 router.post('/register', registerUser)
-router.post('/login', login)
+router.post('/login', limiter, login)
 router.get('/protected', protectedRoute, protectedRouteHandler)
 module.exports = router
