@@ -5,8 +5,11 @@ const errorHandler = require('./middlewware/errorHnadler.js')
 const notFoundHandler = require('./middlewware/notFoundHandler.js')
 const cors = require('cors')
 const cookies = require('cookie-parser')
-
+const helmet = require('helmet')
 const app = express()
+app.use(helmet({
+    contentSecurityPolicy: false
+}))
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS).split(',')
 app.use(cors({
     origin: function (origin, callback) {
