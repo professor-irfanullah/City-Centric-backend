@@ -33,8 +33,8 @@ const login = async (req, res, next) => {
         res.cookie('session_token', token, {
             sameSite: process.env.SAME_SITE,
             httpOnly: true,
-            maxAge: process.env.MAX_AGE,
-            secure: process.env.SECURE
+            maxAge: Number(process.env.MAX_AGE), // Ensure this is a number
+            secure: process.env.SECURE === 'true'
         })
         res.status(200).json({ msg: "Please wait while we log you in", user: { name: data.name, role: data.role } })
     } catch (error) {
