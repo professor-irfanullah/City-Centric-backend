@@ -13,12 +13,12 @@ app.use(helmet({
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS).split(',')
 app.use(cors({
     origin: function (origin, callback) {
-         if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-    } else {
-        console.log(`The origin ${origin} : is blocked by CORS`);
-        callback(new Error('Not allowed by CORS'));
-    }
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.log(`The origin ${origin} : is blocked by CORS`);
+            callback(new Error('Not allowed by CORS'));
+        }
         // if (!origin || allowedOrigins.includes(origin)) {
         //     callback(null, true);
         // } else {
