@@ -1,10 +1,11 @@
-const { query, pool } = require('../config/db')
+require('dotenv').config()
+const { pool } = require('../config/db')
 const { sendVerificationEmail } = require('../services/email')
 const { errorGenerator } = require('../utils/errorGenarator')
 const { hashPassword } = require('../utils/hashing')
 const { createAToken } = require('../utils/tokens')
 const registerUser = async (req, res, next) => {
-    const client = await pool.connect()
+
     const registerQuery = `insert into users(name,father_name,email,cnic,phone_number,muhalla,village,tehsil,district,password_hash)
     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`
     const { name, father_name, email, cnic, contact, muhalla, village, tehsil, district, password } = req.body
@@ -42,21 +43,22 @@ const registerUser = async (req, res, next) => {
     if (!password) {
         return next(errorGenerator('Password is required', 400))
     }
-
+    let client;
     try {
         const token = createAToken({ name, email, cnic })
-        const verification_link = `${req.protocol}://${req.get('host')}/api/auth/verify?token=${token}`
+        const verification_link = process.env.FRONTEND_URL + `/verify-email?token=${token}&email=${email}`;
         const hashed_password = await hashPassword(password)
+        client = await pool.connect()
         await client.query('BEGIN')
-        await pool.query(registerQuery, [name, father_name, email, cnic, contact, muhalla, village, tehsil, district, hashed_password])
+        await client.query(registerQuery, [name, father_name, email, cnic, contact, muhalla, village, tehsil, district, hashed_password])
         // Call Brevo service
         const payload = { email, name, verification_link }
         await sendVerificationEmail(payload);
-        await client.query('commit')
+        await client.query('COMMIT')
         res.status(201).json({ msg: "Account created successfully. Please verify your account via the link sent to your email address." })
     }
     catch (error) {
-        await client.query('Rollback')
+        if (client) await client.query('ROLLBACK');
         if (error.constraint === 'cnic_format_check') {
             return next(errorGenerator('Invalid CNIC format', 400))
         }
@@ -70,7 +72,7 @@ const registerUser = async (req, res, next) => {
         next(errorGenerator('Something went wrong Please try again later', error.statusCode))
     }
     finally {
-        client.release()
+        if (client) client.release()
     }
 }
 module.exports = { registerUser }
