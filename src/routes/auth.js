@@ -10,7 +10,7 @@ const router = express.Router()
 router.use(express.json())
 
 router.get('/test', test)
-router.get('/verify', regitrationVerification)
+router.post('/verify', regitrationVerification)
 router.post('/register', registerUser)
 router.post('/login', limiter, login)
 router.get('/protected', protectedRoute, protectedRouteHandler)
