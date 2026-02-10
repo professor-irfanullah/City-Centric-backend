@@ -10,8 +10,9 @@ const router = express.Router()
 router.use(express.json())
 
 router.get('/test', test)
+router.get('/protected', protectedRoute, protectedRouteHandler)
+
 router.post('/verify', regitrationVerification)
 router.post('/register', registerUser)
 router.post('/login', limiter, login)
-router.get('/protected', protectedRoute, protectedRouteHandler)
 module.exports = router
