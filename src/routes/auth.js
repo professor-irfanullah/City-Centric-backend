@@ -12,7 +12,7 @@ router.use(express.json())
 router.get('/test', test)
 router.get('/protected', protectedRoute, protectedRouteHandler)
 
-router.post('/verify', regitrationVerification)
+router.post('/verify', limiter.verificationEmailLimiter, regitrationVerification)
 router.post('/register', registerUser)
-router.post('/login', limiter, login)
+router.post('/login', limiter.loginLimiter, login)
 module.exports = router

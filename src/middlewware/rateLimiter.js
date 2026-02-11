@@ -11,4 +11,15 @@ const loginLimiter = rateLimit({
         next(errorGenerator(options.message, 429));
     }
 })
-module.exports = loginLimiter;
+
+const verificationEmailLimiter = rateLimit({
+    windowMs: 60 * 60 * 100,
+    max: 3,
+    message: 'Too many requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res, next, options) => {
+        next(errorGenerator(options.message, 429));
+    }
+})
+module.exports = { loginLimiter, verificationEmailLimiter };
