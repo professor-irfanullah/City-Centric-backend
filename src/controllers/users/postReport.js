@@ -297,10 +297,8 @@ const postReport = async (req, res, next) => {
         ]);
 
         await client.query('COMMIT');
-
         res.json({
             msg: "Report was filed successfully.",
-            report: response.rows[0]
         });
 
     } catch (error) {
