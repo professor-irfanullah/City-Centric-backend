@@ -95,42 +95,48 @@ const generatePdf = async (req, res, next) => {
     // Execute SQL query
     const { rows } = await query(`
      SELECT
-        dr.report_id,
-        NOW() AS report_date,
-        dr.disaster_type,
-        dr.created_at AS incident_date,
-        dr.big_animals_death_count,
-        dr.small_animals_death_count,
-        dr.small_animals_injured_count,
-        -- Home Damage Level (single value)
-        CASE 
-            WHEN dr.is_home_impacted THEN dr.home_damage_level 
-            ELSE NULL 
-        END AS home_damage_level,
-        -- Shop Damage Level (single value)
-        CASE 
-            WHEN dr.is_shop_impacted THEN dr.shop_damage_level 
-            ELSE NULL 
-        END AS shop_damage_level,
-        u.name,
-        u.father_name,
-        u.cnic,
-        u.phone_number,
-        u.muhalla,
-        u.district,
-        u.village,
-        u.tehsil,
-        dr.total_residents_count,
-        dr.deaths_count,
-        dr.injured_count,
-        dr.disabled_persons_count,
-        dr.big_animals_injured_count,
-        CASE WHEN dr.is_home_impacted THEN true ELSE false END AS has_home_damage,
-        CASE WHEN dr.is_shop_impacted THEN true ELSE false END AS has_shop_damage
-    FROM users u
-        JOIN disaster_report dr ON dr.reporter_id = u.user_id
-    WHERE
-        dr.report_id = $1
+    dr.report_id,
+    NOW() AS report_date,
+    initcap(dr.disaster_type::text) as disaster_type,
+    dr.created_at AS incident_date,
+    dr.big_animals_death_count,
+    dr.small_animals_death_count,
+    dr.small_animals_injured_count,
+    -- Home Damage Level (single value)
+    CASE
+        WHEN dr.is_home_impacted THEN dr.home_damage_level
+        ELSE NULL
+    END AS home_damage_level,
+    -- Shop Damage Level (single value)
+    CASE
+        WHEN dr.is_shop_impacted THEN dr.shop_damage_level
+        ELSE NULL
+    END AS shop_damage_level,
+    initcap(u.name) as name,
+    initcap(u.father_name) as father_name,
+    u.cnic,
+    u.phone_number,
+    initcap(u.muhalla) as muhalla,
+    initcap(u.district) as district,
+    initcap(u.village) as village,
+    initcap(u.tehsil) as tehsil,
+    dr.total_residents_count,
+    dr.deaths_count,
+    dr.injured_count,
+    dr.disabled_persons_count,
+    dr.big_animals_injured_count,
+    CASE
+        WHEN dr.is_home_impacted THEN true
+        ELSE false
+    END AS has_home_damage,
+    CASE
+        WHEN dr.is_shop_impacted THEN true
+        ELSE false
+    END AS has_shop_damage
+FROM users u
+    JOIN disaster_report dr ON dr.reporter_id = u.user_id
+where
+    dr.report_id = $1
 `, [reportId]);
 
     if (rows.length === 0) {
@@ -155,7 +161,7 @@ const generatePdf = async (req, res, next) => {
       district: data.district || 'N/A',
       tehsil: data.tehsil || 'N/A',
       village: data.village || 'N/A',
-      // muhalla: data.muhalla || 'N/A', // Not used in template (uses village field)
+      muhalla: data.muhalla || 'N/A', // Not used in template (uses village field)
 
       // Home Damage - SINGLE LEVEL
       home_damage_level: data.home_damage_level
@@ -491,8 +497,10 @@ const generatePdf = async (req, res, next) => {
             <td class="data-cell">{{tehsil}}</td>
           </tr>
           <tr>
-            <td class="label-cell">Village/Mohalla:</td>
-            <td colspan="3" class="data-cell">{{village}}</td>
+            <td class="label-cell">Village:</td>
+            <td class="data-cell">{{village}}</td>
+            <td class="label-cell">Mohalla:</td>
+            <td class="data-cell">{{muhalla}}</td>
           </tr>
         </table>
 
