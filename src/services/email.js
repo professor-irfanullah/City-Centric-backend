@@ -57,5 +57,20 @@ async function sendAdminInviteEmail(obj) {
     }
     return apiInstance.sendTransacEmail(payload);
 }
+async function sendPasswordResetEmail(obj) {
+    const { email, reset_link } = obj
+    const payload = {
+        to: [{ email: email }],
+        sender: { email: process.env.BREVO_VERIFIED_EMAIL, name: process.env.SYSTEM_NAME },
+        templateId: Number(process.env.PASSWORD_RESET_TEMPLATE_ID),
+        params: {
+            user_email: email,
+            reset_link: reset_link,
+            organization_name: process.env.SYSTEM_NAME
+        }
+    };
 
-module.exports = { sendVerificationEmail, sendAdminInviteEmail };
+    return apiInstance.sendTransacEmail(payload);
+    // return obj
+}
+module.exports = { sendVerificationEmail, sendAdminInviteEmail, sendPasswordResetEmail };
