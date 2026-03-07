@@ -6,6 +6,7 @@ const { login } = require('../controllers/login.js')
 const { protectedRoute } = require('../middlewware/verifyTokenMiddleware.js')
 const { protectedRouteHandler } = require('../controllers/ptotectedRoute.js')
 const limiter = require('../middlewware/rateLimiter.js')
+const { forgotPassword } = require('../controllers/forgotPassword.js')
 const router = express.Router()
 router.use(express.json())
 
@@ -15,4 +16,6 @@ router.get('/protected', protectedRoute, protectedRouteHandler)
 router.post('/verify', limiter.verificationEmailLimiter, regitrationVerification)
 router.post('/register', registerUser)
 router.post('/login', limiter.loginLimiter, login)
+router.post('/forgot-password', limiter.forgotPasswordLimiter, forgotPassword)
+
 module.exports = router
