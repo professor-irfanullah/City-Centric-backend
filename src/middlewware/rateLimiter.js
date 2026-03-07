@@ -22,4 +22,15 @@ const verificationEmailLimiter = rateLimit({
         next(errorGenerator(options.message, 429));
     }
 })
-module.exports = { loginLimiter, verificationEmailLimiter };
+
+const forgotPasswordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5, // limit each IP to 5 requests per windowMs
+    message: 'Too many password reset requests from this IP, please try again later.',
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res, next, options) => {
+        next(errorGenerator(options.message, 429));
+    }
+})
+module.exports = { loginLimiter, verificationEmailLimiter, forgotPasswordLimiter };
