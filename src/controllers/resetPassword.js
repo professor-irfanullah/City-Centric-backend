@@ -16,7 +16,7 @@ const resetPassword = async (req, res, next) => {
 
         //  Verify token
         const response = await query(
-            'SELECT fpt.user_id FROM forgot_password_tokens fpt JOIN users u ON u.user_id = fpt.user_id WHERE u.email = $1 AND fpt.token = $2 AND fpt.expires_at < NOW()',
+            'SELECT fpt.user_id FROM forgot_password_tokens fpt JOIN users u ON u.user_id = fpt.user_id WHERE u.email = $1 AND fpt.token = $2 AND fpt.expires_at > NOW()',
             [email, tokenHash]
         );
 
