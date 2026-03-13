@@ -17,5 +17,9 @@ COPY . .
 
 # Change to match your server.js port
 EXPOSE 4000
+# Add this HEALTHCHECK instruction
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD curl -f -H "Origin: http://localhost:4000" http://localhost:4000/api/auth/test || exit 1
+
 
 CMD [ "node", "server.js" ]
