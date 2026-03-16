@@ -13,8 +13,10 @@
   "type": "commonjs",
   "dependencies": {
     "@getbrevo/brevo": "^3.0.1",
+    "@sparticuz/chromium": "^143.0.4",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.8.0",
+    "cookie": "^1.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -24,6 +26,6 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "pg": "^8.16.3",
-    "puppeteer": "^24.36.1"
+    "puppeteer-core": "^24.39.1"
   }
 }
