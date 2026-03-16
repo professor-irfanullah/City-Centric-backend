@@ -7,7 +7,7 @@ let browserInstance = null;
 let browserPromise = null;
 let requestCount = 0;
 
-// Helper for date formatting (keep as is)
+// Helper for date formatting
 const formatDate = (date) => {
   if (!date) return 'N/A';
   try {
@@ -33,37 +33,50 @@ function formatDamageLevel(level) {
 }
 
 const getBrowser = async () => {
-  requestCount++;
+  // If we have an instance and it's connected, return it
+  if (browserInstance && browserInstance.isConnected()) {
+    requestCount++;
 
-  // Refresh browser after 100 requests (your original logic)
-  if (browserInstance && requestCount > 100) {
-    console.log("Refreshing browser instance...");
-    const oldBrowser = browserInstance;
-    browserInstance = null;
-    requestCount = 0;
-    oldBrowser.close().catch(e => console.error("Error closing old browser:", e));
+    // Refresh browser after 100 requests
+    if (requestCount > 100) {
+      console.log("Refreshing browser instance...");
+      const oldBrowser = browserInstance;
+      browserInstance = null;
+      requestCount = 0;
+      try {
+        await oldBrowser.close();
+      } catch (e) {
+        console.error("Error closing old browser:", e);
+      }
+    } else {
+      return browserInstance;
+    }
   }
 
-  if (browserInstance) return browserInstance;
-
+  // Create new browser instance if needed
   if (!browserPromise) {
     browserPromise = (async () => {
       try {
-        // Get executable path from @sparticuz/chromium
         const executablePath = await chromium.executablePath();
 
-        // Launch with your ORIGINAL, WORKING args configuration
+        console.log("Launching browser with path:", executablePath);
+
         const browser = await puppeteer.launch({
           executablePath,
-          headless: chromium.headless, // Use chromium's headless setting
+          headless: true, // Use true instead of chromium.headless
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-gpu',
-            '--font-render-hinting=none'
+            '--font-render-hinting=none',
+            '--single-process', // Add this for serverless
+            '--no-zygote'
           ],
-          defaultViewport: chromium.defaultViewport
+          defaultViewport: {
+            width: 1200,
+            height: 800
+          }
         });
 
         browserInstance = browser;
@@ -81,18 +94,15 @@ const getBrowser = async () => {
 };
 
 const generatePdf = async (req, res, next) => {
-  let context;
-  let page;
+  let page = null;
+  let context = null;
 
   try {
     const browser = await getBrowser();
+
+    // Create a new context and page
     context = await browser.createBrowserContext();
-
-    // FIX: Create page and wait for it to be fully ready before any operations
     page = await context.newPage();
-
-    // Wait a tiny bit for the page to be fully initialized
-    await new Promise(resolve => setTimeout(resolve, 100));
 
     // Get report_id from request
     const reportId = req.body?.report_id || req.query?.report_id;
@@ -187,18 +197,43 @@ const generatePdf = async (req, res, next) => {
       generation_timestamp: formatDate(new Date())
     };
 
-    // Your HTML template (keep your existing template)
-    const template = `<!doctype html>
+    // Build HTML with template literals instead of complex replacements
+    const getDamageCell = (hasDamage, level) => {
+      if (hasDamage) {
+        return `<td class="data-cell">${level}</td>`;
+      }
+      return `<td class="no-data">No Damage Reported</td>`;
+    };
+
+    const getWarningRow = () => {
+      if (!templateData.has_home_damage && !templateData.has_shop_damage) {
+        return `<tr>
+          <td colspan="2" class="no-data" style="text-align: center; padding: 8px">
+            ⚠️ No Home or Shop Damage Recorded for this Report
+          </td>
+        </tr>`;
+      }
+      return '';
+    };
+
+    const html = `<!doctype html>
     <html lang="en">
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Individual Relief Compensation Report</title>
         <style>
-          /* YOUR ORIGINAL STYLES - keep them exactly as they were */
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          body {
+            font-family: "Times New Roman", serif;
+            padding: 20px;
+          }
           header {
             padding: 10px 20px;
-            font-family: "Times New Roman", serif;
           }
           #top {
             display: flex;
@@ -260,13 +295,10 @@ const generatePdf = async (req, res, next) => {
             font-size: 16px;
             margin: 5px 0;
           }
-    
           .report-body {
             padding: 0 20px;
-            font-family: "Times New Roman", serif;
             margin-top: 5px;
           }
-    
           .info-table {
             width: 100%;
             border-collapse: collapse;
@@ -274,25 +306,21 @@ const generatePdf = async (req, res, next) => {
             border: 1px solid #222;
             font-size: 12px;
           }
-    
           .info-table td {
             padding: 4px 8px;
             border: 1px solid #b8c6bc;
             vertical-align: middle;
           }
-    
           .info-table .label-cell {
             background-color: #edf2eb;
             font-weight: 600;
             width: 25%;
           }
-    
           .info-table .data-cell {
             font-weight: 500;
             background-color: #ffffff;
             width: 25%;
           }
-    
           .cat-header {
             background-color: #004d26;
             color: white;
@@ -302,7 +330,6 @@ const generatePdf = async (req, res, next) => {
             font-size: 13px;
             border: 1px solid #004d26;
           }
-    
           .damage-table {
             width: 100%;
             border-collapse: collapse;
@@ -310,40 +337,29 @@ const generatePdf = async (req, res, next) => {
             border: 1px solid #222;
             font-size: 12px;
           }
-    
           .damage-table th {
             background-color: #e7ede4;
             font-weight: 700;
             padding: 4px 6px;
             border: 1px solid #8fa093;
             color: #00331f;
-            font-size: 12px;
           }
-    
           .damage-table td {
             padding: 4px 6px;
             border: 1px solid #b8c6bc;
             text-align: center;
           }
-    
           .damage-table .category {
             background-color: #edf2eb;
             font-weight: 600;
             text-align: left;
             padding-left: 10px;
           }
-    
           .damage-table .no-data {
             background-color: #f5f5f5;
             color: #999;
             font-style: italic;
           }
-    
-          .data-cell {
-            font-weight: 700;
-            background-color: #fafaf5;
-          }
-    
           .signature-section {
             display: flex;
             justify-content: space-between;
@@ -351,18 +367,15 @@ const generatePdf = async (req, res, next) => {
             padding: 0 10px;
             font-size: 11px;
           }
-    
           .signature-box {
             text-align: center;
             width: 150px;
           }
-    
           .signature-line {
             margin: 10px 0 3px 0;
             border-top: 1px solid #333;
             width: 100%;
           }
-    
           .stamp {
             width: 70px;
             height: 70px;
@@ -376,27 +389,15 @@ const generatePdf = async (req, res, next) => {
             text-align: center;
             transform: rotate(-15deg);
           }
-    
           .footer {
             text-align: center;
             margin-top: 10px;
             font-size: 9px;
             color: #666;
           }
-    
-          .damage-table th[rowspan] {
-            vertical-align: middle;
-          }
-    
           @media print {
             body {
               margin: 0.2in;
-            }
-            .signature-line {
-              border-top: 1px solid #000;
-            }
-            .report-body {
-              page-break-inside: avoid;
             }
           }
         </style>
@@ -405,10 +406,7 @@ const generatePdf = async (req, res, next) => {
         <header>
           <section id="top">
             <div class="img-container">
-              <img
-                src="https://kp.gov.pk/uploads/2025/08/kp_logo.png"
-                alt="KP Government Logo"
-              />
+              <img src="https://kp.gov.pk/uploads/2025/08/kp_logo.png" alt="KP Government Logo" />
             </div>
             <div class="centerItems">
               <h1>Provincial Disaster Management Authority (PDMA)</h1>
@@ -421,19 +419,14 @@ const generatePdf = async (req, res, next) => {
               </p>
             </div>
             <div class="img-container">
-              <img
-                src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR9KSwxiA1NBEHIAPqq-8aIXY8litlhyv6nkA&s"
-                alt="PDMA Logo"
-              />
+              <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR9KSwxiA1NBEHIAPqq-8aIXY8litlhyv6nkA&s" alt="PDMA Logo" />
             </div>
           </section>
         </header>
     
         <main class="main">
           <div>
-            <h3>
-              Notified in Khyber Pakhtunkhwa Govt: Gazette, Dated {{report_date}}
-            </h3>
+            <h3>Notified in Khyber Pakhtunkhwa Govt: Gazette, Dated ${templateData.report_date}</h3>
           </div>
           <div class="proformaHeading">
             <h3>INDIVIDUAL RELIEF COMPENSATION PROFORMA</h3>
@@ -443,15 +436,15 @@ const generatePdf = async (req, res, next) => {
             <table class="info-table">
               <tr>
                 <td class="label-cell">Report ID:</td>
-                <td class="data-cell">#{{report_id}}</td>
+                <td class="data-cell">#${templateData.report_id}</td>
                 <td class="label-cell">Date:</td>
-                <td class="data-cell">{{report_date}}</td>
+                <td class="data-cell">${templateData.report_date}</td>
               </tr>
               <tr>
                 <td class="label-cell">Disaster Type:</td>
-                <td class="data-cell">{{disaster_type}}</td>
+                <td class="data-cell">${templateData.disaster_type}</td>
                 <td class="label-cell">Incident Date:</td>
-                <td class="data-cell">{{incident_date}}</td>
+                <td class="data-cell">${templateData.incident_date}</td>
               </tr>
             </table>
     
@@ -461,27 +454,27 @@ const generatePdf = async (req, res, next) => {
               </tr>
               <tr>
                 <td class="label-cell">Full Name:</td>
-                <td class="data-cell">{{full_name}}</td>
+                <td class="data-cell">${templateData.full_name}</td>
                 <td class="label-cell">Father's Name:</td>
-                <td class="data-cell">{{father_name}}</td>
+                <td class="data-cell">${templateData.father_name}</td>
               </tr>
               <tr>
                 <td class="label-cell">CNIC No.:</td>
-                <td class="data-cell">{{cnic}}</td>
+                <td class="data-cell">${templateData.cnic}</td>
                 <td class="label-cell">Mobile No.:</td>
-                <td class="data-cell">{{mobile}}</td>
+                <td class="data-cell">${templateData.mobile}</td>
               </tr>
               <tr>
                 <td class="label-cell">District:</td>
-                <td class="data-cell">{{district}}</td>
+                <td class="data-cell">${templateData.district}</td>
                 <td class="label-cell">Tehsil:</td>
-                <td class="data-cell">{{tehsil}}</td>
+                <td class="data-cell">${templateData.tehsil}</td>
               </tr>
               <tr>
                 <td class="label-cell">Village:</td>
-                <td class="data-cell">{{village}}</td>
+                <td class="data-cell">${templateData.village}</td>
                 <td class="label-cell">Mohalla:</td>
-                <td class="data-cell">{{muhalla}}</td>
+                <td class="data-cell">${templateData.muhalla}</td>
               </tr>
             </table>
     
@@ -495,31 +488,13 @@ const generatePdf = async (req, res, next) => {
               </tr>
               <tr>
                 <td class="category">Home</td>
-                {{#if has_home_damage}}
-                <td class="data-cell">{{home_damage_level}}</td>
-                {{else}}
-                <td class="no-data">No Home Damage Reported</td>
-                {{/if}}
+                ${getDamageCell(templateData.has_home_damage, templateData.home_damage_level)}
               </tr>
               <tr>
                 <td class="category">Shop/Business</td>
-                {{#if has_shop_damage}}
-                <td class="data-cell">{{shop_damage_level}}</td>
-                {{else}}
-                <td class="no-data">No Shop/Business Damage Reported</td>
-                {{/if}}
+                ${getDamageCell(templateData.has_shop_damage, templateData.shop_damage_level)}
               </tr>
-              {{#unless has_home_damage}} {{#unless has_shop_damage}}
-              <tr>
-                <td
-                  colspan="2"
-                  class="no-data"
-                  style="text-align: center; padding: 8px"
-                >
-                  ⚠️ No Home or Shop Damage Recorded for this Report
-                </td>
-              </tr>
-              {{/unless}} {{/unless}}
+              ${getWarningRow()}
             </table>
     
             <table class="damage-table">
@@ -533,10 +508,10 @@ const generatePdf = async (req, res, next) => {
                 <th>Disabled</th>
               </tr>
               <tr>
-                <td class="data-cell">{{total_residents}}</td>
-                <td class="data-cell">{{deaths_count}}</td>
-                <td class="data-cell">{{injured_count}}</td>
-                <td class="data-cell">{{disabled_count}}</td>
+                <td class="data-cell">${templateData.total_residents}</td>
+                <td class="data-cell">${templateData.deaths_count}</td>
+                <td class="data-cell">${templateData.injured_count}</td>
+                <td class="data-cell">${templateData.disabled_count}</td>
               </tr>
             </table>
     
@@ -557,10 +532,10 @@ const generatePdf = async (req, res, next) => {
               </tr>
               <tr>
                 <td class="category">Count</td>
-                <td class="data-cell">{{big_deaths}}</td>
-                <td class="data-cell">{{big_injured}}</td>
-                <td class="data-cell">{{small_deaths}}</td>
-                <td class="data-cell">{{small_injured}}</td>
+                <td class="data-cell">${templateData.big_deaths}</td>
+                <td class="data-cell">${templateData.big_injured}</td>
+                <td class="data-cell">${templateData.small_deaths}</td>
+                <td class="data-cell">${templateData.small_injured}</td>
               </tr>
             </table>
     
@@ -568,75 +543,48 @@ const generatePdf = async (req, res, next) => {
               <div class="signature-box">
                 <div class="signature-line"></div>
                 <p><strong>Applicant's Signature</strong></p>
-                <p>{{full_name}}</p>
-                <p style="font-size: 9px; margin: 2px 0">
-                  Date: {{signature_date}}
-                </p>
+                <p>${templateData.full_name}</p>
+                <p style="font-size: 9px; margin: 2px 0">Date: ${templateData.signature_date}</p>
               </div>
     
               <div class="signature-box">
                 <div class="signature-line"></div>
                 <p><strong>Verifying Officer</strong></p>
-                <p>{{verifying_officer}}</p>
-                <p style="font-size: 9px; margin: 2px 0">
-                  {{verifying_designation}}
-                </p>
+                <p>${templateData.verifying_officer}</p>
+                <p style="font-size: 9px; margin: 2px 0">${templateData.verifying_designation}</p>
               </div>
     
               <div class="stamp">OFFICIAL STAMP</div>
             </div>
     
             <div class="footer">
-              <p>
-                Generated on: {{generation_timestamp}} | Computer generated document
-              </p>
+              <p>Generated on: ${templateData.generation_timestamp} | Computer generated document</p>
             </div>
           </section>
         </main>
       </body>
     </html>`;
 
-    // Replace placeholders
-    let html = template;
-    Object.keys(templateData).forEach(key => {
-      const regex = new RegExp(`{{${key}}}`, 'g');
-      const value = templateData[key] !== undefined ? templateData[key] : '';
-      html = html.replace(regex, value);
-    });
-
-    // Handle conditional blocks
-    html = html.replace(/\{\{#if has_home_damage\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, ifContent, elseContent) => {
-      return templateData.has_home_damage ? ifContent : elseContent;
-    });
-
-    html = html.replace(/\{\{#if has_shop_damage\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, ifContent, elseContent) => {
-      return templateData.has_shop_damage ? ifContent : elseContent;
-    });
-
-    html = html.replace(/\{\{#unless has_home_damage\}\}\s*\{\{#unless has_shop_damage\}\}([\s\S]*?)\{\{\/unless\}\}\s*\{\{\/unless\}\}/g, (_, content) => {
-      return (!templateData.has_home_damage && !templateData.has_shop_damage) ? content : '';
-    });
-
-    // FIX: Completely avoid request interception which might be causing the issue
-    // Instead, navigate to a data URL with the HTML content
-    // This approach avoids request interception entirely
-
-    // Navigate to a data URL with the HTML content (this doesn't trigger external requests)
-    await page.goto(`data:text/html,${encodeURIComponent(html)}`, {
+    // Set content directly without any navigation or request interception
+    await page.setContent(html, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
 
-    // Wait for any rendering to complete
-    await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 500)));
-
+    // Generate PDF
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+      margin: {
+        top: '20px',
+        right: '20px',
+        bottom: '20px',
+        left: '20px'
+      },
       preferCSSPageSize: true
     });
 
+    // Send response
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="relief-report-${reportId}.pdf"`,
@@ -647,18 +595,22 @@ const generatePdf = async (req, res, next) => {
 
   } catch (error) {
     console.error('PDF Generation Error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
+    console.error('Error stack:', error.stack);
     next(errorGenerator('Failed to generate report: ' + error.message, 500));
   } finally {
+    // Clean up
+    if (page) {
+      try {
+        await page.close();
+      } catch (e) {
+        console.error('Error closing page:', e);
+      }
+    }
     if (context) {
       try {
         await context.close();
-      } catch (closeError) {
-        console.error('Error closing context:', closeError);
+      } catch (e) {
+        console.error('Error closing context:', e);
       }
     }
   }
