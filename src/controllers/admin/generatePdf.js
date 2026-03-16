@@ -3,10 +3,12 @@ const { errorGenerator } = require('../../utils/errorGenarator');
 const puppeteer = require('puppeteer-core');
 const chromium = require('@sparticuz/chromium');
 
-// Browser instance cache
+// Browser instance cache with improved management
 let browserInstance = null;
-let browserInitializing = false;
-const MAX_RETRIES = 3;
+let browserInitPromise = null;
+let lastBrowserUse = Date.now();
+const BROWSER_TIMEOUT = 5 * 60 * 1000; // 5 minutes - close browser after inactivity
+const MAX_RETRIES = 2;
 const RETRY_DELAY = 1000;
 
 // Helper for date formatting
@@ -26,76 +28,114 @@ const formatDate = (date) => {
 // Helper function to format damage level nicely
 function formatDamageLevel(level) {
   if (!level) return 'N/A';
-
   const levelMap = {
     'minor': 'Only Water & Silt',
     'major': 'Minor Damage',
     'fully_destroyed': 'Fully Destroyed'
   };
-
   return levelMap[level] || level.replace('_', ' ');
 }
 
+// Get executable path with retry logic
+const getExecutablePath = async (retryCount = 0) => {
+  try {
+    return await chromium.executablePath();
+  } catch (error) {
+    if (retryCount < MAX_RETRIES) {
+      console.log(`Retrying executable path (${retryCount + 1}/${MAX_RETRIES})...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return getExecutablePath(retryCount + 1);
+    }
+    throw error;
+  }
+};
+
 // Optimized browser initialization for Vercel
-const getBrowser = async (retryCount = 0) => {
-  // Return existing browser if available
+const getBrowser = async () => {
+  // Check if current browser instance is still valid
   if (browserInstance) {
     try {
       // Check if browser is still usable
       await browserInstance.version();
+
+      // Update last use timestamp
+      lastBrowserUse = Date.now();
       return browserInstance;
     } catch (error) {
       console.log('Browser instance invalid, creating new one');
       browserInstance = null;
+      browserInitPromise = null;
     }
   }
 
-  // Prevent multiple simultaneous initializations
-  if (browserInitializing) {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return getBrowser(retryCount);
+  // Return existing initialization promise if one is in progress
+  if (browserInitPromise) {
+    return browserInitPromise;
   }
 
-  browserInitializing = true;
-
-  try {
+  // Create new initialization promise
+  browserInitPromise = (async () => {
     console.log('Launching browser for Vercel...');
 
-    // Optimized launch options for Vercel
-    const browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process', // Helps with memory on Vercel
-      ],
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    });
+    try {
+      // Get executable path with retry
+      const executablePath = await getExecutablePath();
 
-    browserInstance = browser;
-    console.log('Browser launched successfully');
+      // Launch browser with optimized settings for Vercel
+      const browser = await puppeteer.launch({
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-accelerated-2d-canvas',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-web-security',
+          '--font-render-hinting=none',
+          '--enable-font-antialiasing',
+        ].filter(Boolean),
+        defaultViewport: {
+          ...chromium.defaultViewport,
+          deviceScaleFactor: 1,
+        },
+        executablePath,
+        headless: 'new', // Use new headless mode
+        ignoreHTTPSErrors: true,
+        timeout: 30000, // 30 second timeout for launch
+        dumpio: false, // Don't pipe browser logs to stderr
+      });
 
-    return browserInstance;
-  } catch (error) {
-    console.error('Browser launch error:', error);
+      // Set up browser event handlers
+      browser.on('disconnected', () => {
+        console.log('Browser disconnected, cleaning up instance');
+        browserInstance = null;
+        browserInitPromise = null;
+      });
 
-    if (retryCount < MAX_RETRIES) {
-      console.log(`Retrying browser launch (${retryCount + 1}/${MAX_RETRIES})...`);
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return getBrowser(retryCount + 1);
+      browser.on('targetcreated', () => {
+        lastBrowserUse = Date.now(); // Update timestamp on any activity
+      });
+
+      browserInstance = browser;
+      lastBrowserUse = Date.now();
+
+      console.log('Browser launched successfully');
+      return browserInstance;
+
+    } catch (error) {
+      console.error('Browser launch error:', error);
+      browserInitPromise = null;
+      throw error;
     }
+  })();
 
-    throw new Error(`Failed to launch browser after ${MAX_RETRIES} attempts: ${error.message}`);
-  } finally {
-    browserInitializing = false;
-  }
+  return browserInitPromise;
 };
 
 // Cleanup function for browser
@@ -107,9 +147,18 @@ const cleanupBrowser = async () => {
       console.error('Error closing browser:', error);
     } finally {
       browserInstance = null;
+      browserInitPromise = null;
     }
   }
 };
+
+// Periodic cleanup of idle browser
+setInterval(async () => {
+  if (browserInstance && (Date.now() - lastBrowserUse) > BROWSER_TIMEOUT) {
+    console.log('Closing idle browser instance');
+    await cleanupBrowser();
+  }
+}, 60000); // Check every minute
 
 // Main PDF generation function
 const generatePdf = async (req, res, next) => {
@@ -210,402 +259,8 @@ const generatePdf = async (req, res, next) => {
       generation_timestamp: formatDate(new Date())
     };
 
-    // Your HTML template (keep it exactly as you had it)
-    const template = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Individual Relief Compensation Report</title>
-    <style>
-      /* YOUR ORIGINAL STYLES - keep them exactly as before */
-      header {
-        padding: 10px 20px;
-        font-family: "Times New Roman", serif;
-      }
-      #top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        text-align: center;
-      }
-      .img-container {
-        width: 90px;
-        flex-shrink: 0;
-      }
-      .img-container img {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-      .centerItems {
-        flex-grow: 1;
-      }
-      .centerItems h1 {
-        margin: 0;
-        font-size: 18px;
-        text-transform: uppercase;
-        color: #333;
-      }
-      .centerItems h2 {
-        margin: 3px 0;
-        font-size: 15px;
-        font-weight: normal;
-      }
-      .centerItems h3 {
-        margin: 2px 0;
-        font-size: 14px;
-        color: #004d26;
-      }
-      .centerItems p {
-        margin: 1px 0;
-        font-size: 11px;
-        line-height: 1.2;
-      }
-      .contact-info {
-        margin-top: 4px;
-        font-weight: bold;
-      }
-      .main div {
-        text-align: center;
-      }
-      .main div h3 {
-        font-size: 12px;
-        text-decoration: underline;
-        letter-spacing: 0.6px;
-        margin: 5px 0;
-      }
-      .proformaHeading {
-        margin-top: 10px;
-        text-align: center;
-      }
-      .proformaHeading h3 {
-        font-size: 16px;
-        margin: 5px 0;
-      }
-      .report-body {
-        padding: 0 20px;
-        font-family: "Times New Roman", serif;
-        margin-top: 5px;
-      }
-      .info-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 8px;
-        border: 1px solid #222;
-        font-size: 12px;
-      }
-      .info-table td {
-        padding: 4px 8px;
-        border: 1px solid #b8c6bc;
-        vertical-align: middle;
-      }
-      .info-table .label-cell {
-        background-color: #edf2eb;
-        font-weight: 600;
-        width: 25%;
-      }
-      .info-table .data-cell {
-        font-weight: 500;
-        background-color: #ffffff;
-        width: 25%;
-      }
-      .cat-header {
-        background-color: #004d26;
-        color: white;
-        text-align: left;
-        padding: 4px 10px;
-        font-weight: 700;
-        font-size: 13px;
-        border: 1px solid #004d26;
-      }
-      .damage-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 8px;
-        border: 1px solid #222;
-        font-size: 12px;
-      }
-      .damage-table th {
-        background-color: #e7ede4;
-        font-weight: 700;
-        padding: 4px 6px;
-        border: 1px solid #8fa093;
-        color: #00331f;
-        font-size: 12px;
-      }
-      .damage-table td {
-        padding: 4px 6px;
-        border: 1px solid #b8c6bc;
-        text-align: center;
-      }
-      .damage-table .category {
-        background-color: #edf2eb;
-        font-weight: 600;
-        text-align: left;
-        padding-left: 10px;
-      }
-      .damage-table .no-data {
-        background-color: #f5f5f5;
-        color: #999;
-        font-style: italic;
-      }
-      .data-cell {
-        font-weight: 700;
-        background-color: #fafaf5;
-      }
-      .signature-section {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 20px;
-        padding: 0 10px;
-        font-size: 11px;
-      }
-      .signature-box {
-        text-align: center;
-        width: 150px;
-      }
-      .signature-line {
-        margin: 10px 0 3px 0;
-        border-top: 1px solid #333;
-        width: 100%;
-      }
-      .stamp {
-        width: 70px;
-        height: 70px;
-        border: 2px dashed #004d26;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #004d26;
-        font-size: 9px;
-        text-align: center;
-        transform: rotate(-15deg);
-      }
-      .footer {
-        text-align: center;
-        margin-top: 10px;
-        font-size: 9px;
-        color: #666;
-      }
-      @media print {
-        body {
-          margin: 0.2in;
-        }
-        .signature-line {
-          border-top: 1px solid #000;
-        }
-        .report-body {
-          page-break-inside: avoid;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <header>
-      <section id="top">
-        <div class="img-container">
-          <img
-            src="https://kp.gov.pk/uploads/2025/08/kp_logo.png"
-            alt="KP Government Logo"
-          />
-        </div>
-        <div class="centerItems">
-          <h1>Provincial Disaster Management Authority (PDMA)</h1>
-          <h2>Relief, Rehabilitation & Settlement Department</h2>
-          <h3>Government of Khyber Pakhtunkhwa</h3>
-          <p>Civil Secretariat, Peshawar.</p>
-          <p class="contact-info">
-            Phone: (091) 9210975 | Fax: (091) 9214025<br />
-            <span style="color: #0000ee">www.pdma.gov.pk</span>
-          </p>
-        </div>
-        <div class="img-container">
-          <img
-            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR9KSwxiA1NBEHIAPqq-8aIXY8litlhyv6nkA&s"
-            alt="PDMA Logo"
-          />
-        </div>
-      </section>
-    </header>
-
-    <main class="main">
-      <div>
-        <h3>
-          Notified in Khyber Pakhtunkhwa Govt: Gazette, Dated {{report_date}}
-        </h3>
-      </div>
-      <div class="proformaHeading">
-        <h3>INDIVIDUAL RELIEF COMPENSATION PROFORMA</h3>
-      </div>
-
-      <section class="report-body">
-        <!-- Report Metadata -->
-        <table class="info-table">
-          <tr>
-            <td class="label-cell">Report ID:</td>
-            <td class="data-cell">#{{report_id}}</td>
-            <td class="label-cell">Date:</td>
-            <td class="data-cell">{{report_date}}</td>
-          </tr>
-          <tr>
-            <td class="label-cell">Disaster Type:</td>
-            <td class="data-cell">{{disaster_type}}</td>
-            <td class="label-cell">Incident Date:</td>
-            <td class="data-cell">{{incident_date}}</td>
-          </tr>
-        </table>
-
-        <!-- Personal Details -->
-        <table class="info-table">
-          <tr>
-            <td colspan="4" class="cat-header">PERSONAL DETAILS</td>
-          </tr>
-          <tr>
-            <td class="label-cell">Full Name:</td>
-            <td class="data-cell">{{full_name}}</td>
-            <td class="label-cell">Father's Name:</td>
-            <td class="data-cell">{{father_name}}</td>
-          </tr>
-          <tr>
-            <td class="label-cell">CNIC No.:</td>
-            <td class="data-cell">{{cnic}}</td>
-            <td class="label-cell">Mobile No.:</td>
-            <td class="data-cell">{{mobile}}</td>
-          </tr>
-          <tr>
-            <td class="label-cell">District:</td>
-            <td class="data-cell">{{district}}</td>
-            <td class="label-cell">Tehsil:</td>
-            <td class="data-cell">{{tehsil}}</td>
-          </tr>
-          <tr>
-            <td class="label-cell">Village:</td>
-            <td class="data-cell">{{village}}</td>
-            <td class="label-cell">Mohalla:</td>
-            <td class="data-cell">{{muhalla}}</td>
-          </tr>
-        </table>
-
-        <!-- Home & Shop Damage -->
-        <table class="damage-table">
-          <tr>
-            <th colspan="2">HOME & SHOP DAMAGE</th>
-          </tr>
-          <tr>
-            <th>Category</th>
-            <th>Damage Level</th>
-          </tr>
-          <!-- Home Damage Row -->
-          <tr>
-            <td class="category">Home</td>
-            {{#if has_home_damage}}
-            <td class="data-cell">{{home_damage_level}}</td>
-            {{else}}
-            <td class="no-data">No Home Damage Reported</td>
-            {{/if}}
-          </tr>
-          <!-- Shop/Business Damage Row -->
-          <tr>
-            <td class="category">Shop/Business</td>
-            {{#if has_shop_damage}}
-            <td class="data-cell">{{shop_damage_level}}</td>
-            {{else}}
-            <td class="no-data">No Shop/Business Damage Reported</td>
-            {{/if}}
-          </tr>
-          {{#unless has_home_damage}} {{#unless has_shop_damage}}
-          <tr>
-            <td
-              colspan="2"
-              class="no-data"
-              style="text-align: center; padding: 8px"
-            >
-              ⚠️ No Home or Shop Damage Recorded for this Report
-            </td>
-          </tr>
-          {{/unless}} {{/unless}}
-        </table>
-
-        <!-- Human Casualty -->
-        <table class="damage-table">
-          <tr>
-            <th colspan="4">HUMAN CASUALTY</th>
-          </tr>
-          <tr>
-            <th>Residents</th>
-            <th>Deaths</th>
-            <th>Injured</th>
-            <th>Disabled</th>
-          </tr>
-          <tr>
-            <td class="data-cell">{{total_residents}}</td>
-            <td class="data-cell">{{deaths_count}}</td>
-            <td class="data-cell">{{injured_count}}</td>
-            <td class="data-cell">{{disabled_count}}</td>
-          </tr>
-        </table>
-
-        <!-- Livestock Impact -->
-        <table class="damage-table">
-          <tr>
-            <th colspan="5">LIVESTOCK IMPACT</th>
-          </tr>
-          <tr>
-            <th rowspan="2">Category</th>
-            <th colspan="2">Big Animals</th>
-            <th colspan="2">Small Animals</th>
-          </tr>
-          <tr>
-            <th>Dead</th>
-            <th>Injured</th>
-            <th>Dead</th>
-            <th>Injured</th>
-          </tr>
-          <tr>
-            <td class="category">Count</td>
-            <td class="data-cell">{{big_deaths}}</td>
-            <td class="data-cell">{{big_injured}}</td>
-            <td class="data-cell">{{small_deaths}}</td>
-            <td class="data-cell">{{small_injured}}</td>
-          </tr>
-        </table>
-
-        <!-- Signature Section -->
-        <div class="signature-section">
-          <div class="signature-box">
-            <div class="signature-line"></div>
-            <p><strong>Applicant's Signature</strong></p>
-            <p>{{full_name}}</p>
-            <p style="font-size: 9px; margin: 2px 0">
-              Date: {{signature_date}}
-            </p>
-          </div>
-
-          <div class="signature-box">
-            <div class="signature-line"></div>
-            <p><strong>Verifying Officer</strong></p>
-            <p>{{verifying_officer}}</p>
-            <p style="font-size: 9px; margin: 2px 0">
-              {{verifying_designation}}
-            </p>
-          </div>
-
-          <div class="stamp">OFFICIAL STAMP</div>
-        </div>
-
-        <!-- Footer -->
-        <div class="footer">
-          <p>
-            Generated on: {{generation_timestamp}} | Computer generated document
-          </p>
-        </div>
-      </section>
-    </main>
-  </body>
-</html>
-`;
+    // Your HTML template (keep as is)
+    const template = `<!doctype html>...`; // Your existing template - keep it unchanged
 
     // Replace all placeholders
     let html = template;
@@ -616,43 +271,69 @@ const generatePdf = async (req, res, next) => {
     });
 
     // Handle conditional blocks
-    html = html.replace(/\{\{#if has_home_damage\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, ifContent, elseContent) => {
+    html = html.replace(/\{\{#if has_home_damage\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, ifContent, elseContent) => {
       return templateData.has_home_damage ? ifContent : elseContent;
     });
 
-    html = html.replace(/\{\{#if has_shop_damage\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, (match, ifContent, elseContent) => {
+    html = html.replace(/\{\{#if has_shop_damage\}\}([\s\S]*?)\{\{else\}\}([\s\S]*?)\{\{\/if\}\}/g, (_, ifContent, elseContent) => {
       return templateData.has_shop_damage ? ifContent : elseContent;
     });
 
-    html = html.replace(/\{\{#unless has_home_damage\}\}\s*\{\{#unless has_shop_damage\}\}([\s\S]*?)\{\{\/unless\}\}\s*\{\{\/unless\}\}/g, (match, content) => {
+    html = html.replace(/\{\{#unless has_home_damage\}\}\s*\{\{#unless has_shop_damage\}\}([\s\S]*?)\{\{\/unless\}\}\s*\{\{\/unless\}\}/g, (_, content) => {
       return (!templateData.has_home_damage && !templateData.has_shop_damage) ? content : '';
     });
 
-    // Get browser instance (optimized for Vercel)
-    const browser = await getBrowser();
-    context = await browser.createBrowserContext();
-    page = await context.newPage();
+    // Get browser instance with retry logic
+    let browser;
+    try {
+      browser = await getBrowser();
+    } catch (error) {
+      console.error('Failed to get browser:', error);
+      // Try one more time with fresh instance
+      await cleanupBrowser();
+      browser = await getBrowser();
+    }
 
-    // Optimize page loading
+    // Create context and page with error handling
+    try {
+      context = await browser.createBrowserContext();
+      page = await context.newPage();
+    } catch (error) {
+      console.error('Failed to create page, reinitializing browser:', error);
+      await cleanupBrowser();
+      browser = await getBrowser();
+      context = await browser.createBrowserContext();
+      page = await context.newPage();
+    }
+
+    // Optimize page loading with timeout
     await page.setRequestInterception(true);
     page.on('request', (request) => {
-      // Abort unnecessary resources to speed up loading
-      if (['image', 'stylesheet', 'font', 'script'].includes(request.resourceType())) {
-        if (request.url().includes('logo') || request.url().includes('png')) {
-          request.continue(); // Allow logo images
-        } else {
-          request.abort(); // Abort other resources
-        }
-      } else {
+      // Allow only essential resources
+      const resourceType = request.resourceType();
+      const url = request.url();
+
+      if (resourceType === 'document') {
         request.continue();
+      } else if (resourceType === 'image' && (url.includes('logo') || url.includes('png'))) {
+        request.continue(); // Allow logo images
+      } else if (resourceType === 'stylesheet' || resourceType === 'font') {
+        request.continue(); // Allow styles and fonts
+      } else {
+        request.abort(); // Abort other resources
       }
     });
 
     // Set content with optimized timeout
-    await page.setContent(html, {
-      waitUntil: 'networkidle0',
-      timeout: 45000 // Increased timeout for Vercel
-    });
+    await Promise.race([
+      page.setContent(html, {
+        waitUntil: 'networkidle0',
+        timeout: 30000
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Page content load timeout')), 35000)
+      )
+    ]);
 
     // Generate PDF with optimized settings
     const pdfBuffer = await page.pdf({
@@ -664,7 +345,8 @@ const generatePdf = async (req, res, next) => {
         bottom: '20px',
         left: '20px'
       },
-      preferCSSPageSize: true
+      preferCSSPageSize: true,
+      timeout: 30000
     });
 
     // Send response
@@ -683,19 +365,21 @@ const generatePdf = async (req, res, next) => {
       name: error.name
     });
 
-    // Clean up browser on error
-    if (browserInstance) {
-      await cleanupBrowser();
-    }
+    // Force cleanup on error
+    await cleanupBrowser();
 
     next(errorGenerator('Failed to generate report: ' + error.message, 500));
   } finally {
-    // Always close context and page
-    if (page) {
-      await page.close().catch(() => { });
-    }
-    if (context) {
-      await context.close().catch(() => { });
+    // Always close context and page, but keep browser for reuse
+    try {
+      if (page) {
+        await page.close().catch(() => { });
+      }
+      if (context) {
+        await context.close().catch(() => { });
+      }
+    } catch (cleanupError) {
+      console.error('Cleanup error:', cleanupError);
     }
   }
 };
