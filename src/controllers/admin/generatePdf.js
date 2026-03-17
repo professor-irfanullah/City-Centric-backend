@@ -2355,6 +2355,9 @@ const generatePdf = async (req, res, next) => {
   const reportId = req.body.report_id;
   let browser = null;
 
+  if (!reportId) {
+    return next(errorGenerator('report_id is required', 400))
+  }
   try {
     // 1. Database query
     const { rows } = await db.query(`
