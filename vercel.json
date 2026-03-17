@@ -1,0 +1,34 @@
+{
+    "version": 2,
+    "functions": {
+        "server.js": {
+            "maxDuration": 60,
+            "memory": 1024,
+            "runtime": "nodejs18.x",
+            "includeFiles": "node_modules/@sparticuz/chromium-min/**"
+        }
+    },
+    "routes": [
+        {
+            "src": "/api/admin/download-pdf",
+            "dest": "/server.js",
+            "methods": [
+                "GET"
+            ]
+        },
+        {
+            "src": "/api/(.*)",
+            "dest": "/server.js"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/server.js"
+        }
+    ],
+    "builds": [
+        {
+            "src": "server.js",
+            "use": "@vercel/node"
+        }
+    ]
+}

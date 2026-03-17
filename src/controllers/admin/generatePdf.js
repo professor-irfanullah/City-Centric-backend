@@ -2294,7 +2294,7 @@
 // controllers/pdfController.js
 require('dotenv').config();
 const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium'); // npm install @sparticuz/chromium-min
+const chromium = require('@sparticuz/chromium-min'); // npm install @sparticuz/chromium-min
 const db = require('../../config/db');
 const { errorGenerator } = require('../../utils/errorGenarator');
 
