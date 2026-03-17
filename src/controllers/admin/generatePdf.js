@@ -2352,7 +2352,7 @@ const getBrowserConfig = async () => {
 // ==================== MAIN CONTROLLER ====================
 
 const generatePdf = async (req, res, next) => {
-  const reportId = req.body.report_id;
+  const reportId = req.query.report_id;
   let browser = null;
 
   if (!reportId) {
