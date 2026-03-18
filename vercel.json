@@ -4,7 +4,6 @@
         "server.js": {
             "maxDuration": 60,
             "memory": 1024,
-            "runtime": "nodejs18.x",
             "includeFiles": "node_modules/@sparticuz/chromium-min/**"
         }
     },
