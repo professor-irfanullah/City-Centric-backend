@@ -2294,7 +2294,7 @@
 // controllers/pdfController.js
 require('dotenv').config();
 const puppeteer = require('puppeteer-core');
-const chromium = require('@sparticuz/chromium-min'); // npm install @sparticuz/chromium-min
+const chromium = require('@sparticuz/chromium'); // npm install @sparticuz/chromium-min
 const db = require('../../config/db');
 const { errorGenerator } = require('../../utils/errorGenarator');
 
@@ -2334,7 +2334,7 @@ const getBrowserConfig = async () => {
   if (isDev) {
     return {
       executablePath: process.env.CHROMIUM_LOCAL_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-      headless: 'new',
+      headless: 'false',
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     };
   } else {
@@ -2344,7 +2344,6 @@ const getBrowserConfig = async () => {
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
-      ignoreHTTPSErrors: true,
     };
   }
 };
@@ -2360,6 +2359,7 @@ const generatePdf = async (req, res, next) => {
   }
   try {
     // 1. Database query
+    console.log('Chromium path:', await chromium.executablePath());
     const { rows } = await db.query(`
       SELECT
         dr.report_id,
@@ -2822,6 +2822,7 @@ const generatePdf = async (req, res, next) => {
     res.send(pdfBuffer);
 
   } catch (error) {
+    console.log('Chromium path:', await chromium.executablePath());
     console.error('Error:', error);
 
     if (browser) {
