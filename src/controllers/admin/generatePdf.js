@@ -2639,7 +2639,7 @@ const generatePdf = async (req, res, next) => {
         <header>
           <section id="top">
             <div class="img-container">
-              <img src="https://kp.gov.pk/uploads/2025/08/kp_logo.png" alt="KP Government Logo" />
+              <img src="https://res.cloudinary.com/dvy5bmpem/image/upload/v1773852287/kp_logo_tlm2od.png" alt="KP Government Logo" />
             </div>
             <div class="centerItems">
               <h1>Provincial Disaster Management Authority (PDMA)</h1>
@@ -2652,7 +2652,7 @@ const generatePdf = async (req, res, next) => {
               </p>
             </div>
             <div class="img-container">
-              <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR9KSwxiA1NBEHIAPqq-8aIXY8litlhyv6nkA&s" alt="PDMA Logo" />
+              <img src="https://res.cloudinary.com/dvy5bmpem/image/upload/v1773852304/pdma_img_vfe1ml.jpg" alt="PDMA Logo" />
             </div>
           </section>
         </header>
