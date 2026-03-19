@@ -7,6 +7,7 @@ const cors = require('cors')
 const cookies = require('cookie-parser')
 const helmet = require('helmet')
 const app = express()
+app.set('trust proxy', 1)
 app.use(helmet({
     contentSecurityPolicy: false
 }))
