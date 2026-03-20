@@ -73,7 +73,7 @@ const inviteAdmin = async (req, res, next) => {
 
             // Record exists but is expired/pending: Update it
             await client.query(
-                `UPDATE super_admin_invites SET token_hash = $1, expires_at = $2, status = 'pending' WHERE id = $3`,
+                `UPDATE super_admin_invites SET token_hash = $1, expires_at = $2, status = 'pending', created_at = NOW(), updated_at = NOW() WHERE id = $3`,
                 [tokenHash, expiresAt, id]
             );
         } else {
