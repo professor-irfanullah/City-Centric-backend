@@ -17,7 +17,7 @@ const fetchAdminsData = async (req, res, next) => {
                     'role', U.ROLE,
                     'status', S2.STATUS,
                     'created_at',s2.created_at,
-					'joined_at',u.updated_at
+					'joined_at',s2.updated_at
                 )
             )
         FROM
@@ -28,7 +28,7 @@ const fetchAdminsData = async (req, res, next) => {
 FROM
     SUPER_ADMIN_INVITES MAIN
 GROUP BY 
-    INVITED_BY_ID;;
+    INVITED_BY_ID;
 
 `
     try {
