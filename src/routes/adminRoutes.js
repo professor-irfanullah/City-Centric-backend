@@ -18,6 +18,6 @@ router.get('/download-pdf', protectedRoute, authorize(['admin', 'super_admin']),
 router.get('/get/admins', protectedRoute, authorize(['admin', 'super_admin']), fetchAdminsData)
 
 
-router.post('/invite/admin', protectedRoute, authorize(['admin']), inviteAdmin);
+router.post('/invite/admin', protectedRoute, authorize(['super_admin']), inviteAdmin);
 router.post('/verify/admin-role', verificationEmailLimiter, verifyAdminRole);
 module.exports = router;
