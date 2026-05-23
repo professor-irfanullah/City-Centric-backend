@@ -1,3 +1,4 @@
+require('dotenv').config()
 const express = require('express')
 const authRoutes = require('./routes/auth.js')
 const reportsRoute = require('./routes/affectedRoute')
@@ -14,21 +15,31 @@ app.use(helmet({
 const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS).split(',')
 app.use(cors({
     origin: function (origin, callback) {
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            console.log(`The origin ${origin} : is blocked by CORS`);
-            callback(new Error('Not allowed by CORS'));
-        }
-        // if (!origin || allowedOrigins.includes(origin)) {
+        console.log("Incoming Request Origin:", origin);
+        // Allow requests with no origin (like mobile apps or curl)
+        // if (!origin) return callback(null, true);
+
+        // if (allowedOrigins.includes(origin)) {
         //     callback(null, true);
         // } else {
-        //     console.log(`The origin ${origin} : is blocked by CORS`);
+        //     console.log(`The origin ${origin} is blocked by CORS`);
         //     callback(new Error('Not allowed by CORS'));
         // }
+
+        // origin is undefined when requested server-side (Nuxt SSR)
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+
     },
-    credentials: true
+    credentials: true,
+    optionsSuccessStatus: 200
 }));
+// app.options('/*splat', cors())
+// app.options('.*', cors())
+
 app.use(cookies())
 app.use(express.json())
 app.use('/api/auth', authRoutes)
