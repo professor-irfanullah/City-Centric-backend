@@ -8,9 +8,8 @@ router.use(express.json())
 
 router.post('/post/report', protectedRoute, multer.fields([
     {
-        name: 'home_images', maxCount: 5,
+        name: 'property_images', maxCount: 10,
     },
-    { name: 'shop_images', maxCount: 5 }
 ]), postReport)
 router.get('/get/reports', protectedRoute, getAllPostedReports)
 module.exports = router

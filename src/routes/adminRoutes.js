@@ -1,15 +1,22 @@
 const express = require('express');
 const authorize = require('../middlewware/authorizationMiddleware.js');
+const multer = require('../middlewware/multerMiddleware')
 const router = express.Router();
-const { fetchAllReports } = require('../controllers/admin/fetchAllReports.js');
+const { fetchAllReports } = require('../controllers/admin/fetchAllReports');
+
 const { protectedRoute } = require('../middlewware/verifyTokenMiddleware.js');
 const { inviteAdmin } = require('../controllers/admin/inviteAdmin.js');
 const { verifyAdminRole } = require('../controllers/admin/verifyAdminRole.js');
 const { generatePdf } = require('../controllers/admin/generatePdf.js');
+
 const { fetchAdminAnalytics } = require('../controllers/admin/fetchAdminAnalytics.js');
+
 const { fetchReport } = require('../controllers/admin/fetchSingleReport');
+
 const { fetchAdminsData } = require('../controllers/admin/fetchAdminsAboutInfo.js');
+
 const { verificationEmailLimiter } = require('../middlewware/rateLimiter')
+const { modifyReport } = require('../controllers/admin/modifyUserReport')
 
 router.get('/get/report', protectedRoute, authorize(['admin', 'super_admin']), fetchReport);
 router.get('/get/reports', protectedRoute, authorize(['admin', 'super_admin']), fetchAllReports);
@@ -20,4 +27,9 @@ router.get('/get/admins', protectedRoute, authorize(['admin', 'super_admin']), f
 
 router.post('/invite/admin', protectedRoute, authorize(['super_admin']), inviteAdmin);
 router.post('/verify/admin-role', verificationEmailLimiter, verifyAdminRole);
+router.put('/update/report', protectedRoute, authorize(['super_admin', 'admin']), multer.fields([
+    {
+        name: 'property_images', maxCount: 10,
+    },
+]), modifyReport)
 module.exports = router;
