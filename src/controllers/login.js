@@ -6,23 +6,30 @@ const { createAToken } = require("../utils/tokens")
 
 const login = async (req, res, next) => {
     const { email, password } = req.body
-    if (!email) {
-        return next(errorGenerator('Email is required..', 401))
+
+    if (!email || !password) {
+        return next(errorGenerator('Email and password are required', 400))
     }
-    if (!password) {
-        return next(errorGenerator('Password is required..', 401))
-    }
+
     try {
-        const response = await query('select user_id, name,role,password_hash from users where email = $1 and is_verified = $2', [email, true])
+        const response = await query(
+            'SELECT user_id, name, role, password_hash, is_verified FROM users WHERE email = $1',
+            [email]
+        )
+
         if (response.rows.length === 0) {
-            return next(errorGenerator('User not found', 404))
+            return next(errorGenerator('Invalid credentials', 401))
         }
+
         const data = response.rows[0]
-        const isTrue = await verifyHash(password, data.password_hash)
-        if (!isTrue) {
-            return next(errorGenerator('Invalid Credientials', 400))
+
+        const isMatch = await verifyHash(password, data.password_hash)
+        if (!isMatch) {
+            return next(errorGenerator('Invalid credentials', 401))
         }
-        // now we need to create token and send it as cookies to the browser
+        if (!data.is_verified) {
+            return next(errorGenerator('Please verify your email before logging in', 403))
+        }
         const payload = {
             user_id: data.user_id,
             name: data.name,
@@ -30,16 +37,20 @@ const login = async (req, res, next) => {
         }
         const token = createAToken(payload)
         res.cookie('session_token', token, {
-            sameSite: process.env.SAME_SITE,
+            sameSite: process.env.SAME_SITE || 'Lax',
             httpOnly: true,
-            maxAge: Number(process.env.MAX_AGE), // Ensure this is a number
+            maxAge: Number(process.env.MAX_AGE),
             secure: process.env.SECURE === 'true'
         })
-        res.status(200).json({ msg: "Please wait while we log you in", user: { name: data.name, role: data.role } })
-    } catch (error) {
-        console.log(error);
 
-        return next(errorGenerator('Something went wrong while login in'))
+        return res.status(200).json({
+            msg: "Login successful",
+            user: { name: data.name, role: data.role }
+        })
+
+    } catch (error) {
+        console.error("Login Error:", error);
+        return next(errorGenerator('Internal server error', 500))
     }
 }
 module.exports = { login }

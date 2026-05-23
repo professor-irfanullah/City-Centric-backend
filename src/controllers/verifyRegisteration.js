@@ -33,7 +33,7 @@ const regitrationVerification = async (req, res, next) => {
         // Verify Password
         const isPasswordMatch = await verifyHash(password, user.password_hash);
         if (!isPasswordMatch) {
-            return next(errorGenerator('Invalid credentials', 400));
+            return next(errorGenerator('Invalid credentials', 401));
         }
 
         // Finalize Verification

@@ -63,10 +63,10 @@ const registerUser = async (req, res, next) => {
             return next(errorGenerator('Invalid CNIC format', 400))
         }
         if (error.constraint === 'users_email_key') {
-            return next(errorGenerator('Error Duplicate Entry', 403))
+            return next(errorGenerator('Error Duplicate Entry', 409))
         }
         if (error.constraint === 'users_cnic_key') {
-            return next(errorGenerator('Error Duplicate Entry', 403))
+            return next(errorGenerator('Error Duplicate Entry', 409))
         }
         console.log(error);
         next(errorGenerator('Something went wrong Please try again later', error.statusCode))

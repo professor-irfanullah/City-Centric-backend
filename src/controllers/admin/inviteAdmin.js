@@ -68,7 +68,7 @@ const inviteAdmin = async (req, res, next) => {
 
             if (status === 'pending' && !is_expired) {
                 await client.query('ROLLBACK');
-                return next(errorGenerator('An active invitation already exists', 403));
+                return next(errorGenerator('An active invitation already exists', 409));
             }
 
             // Record exists but is expired/pending: Update it
